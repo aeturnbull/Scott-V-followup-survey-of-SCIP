@@ -1,0 +1,424 @@
+---
+title: "SCIP Follow-up Survey"
+author: "Alison E. Turnbull"
+date: "July 4, 2019"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages, include=FALSE}
+library(tidyverse)
+library(here)
+library(ggplot2)
+library(knitr)
+library(kableExtra)
+library(lubridate)
+library(tableone)
+library(forcats)
+library(stringr)
+library(janitor)
+library(purrr)
+```
+
+**About a year after the SCIP trial ended, all participants were invited to review deidentified transcripts of their simulated family meeting.**
+
+**Survey instructions were as follows: **
+
+*We are interested in the actions you took during your simulated family meeting.  Each of the six*
+*questions asks about one potential action.*
+
+*If you did not complete the action click “Not done.”*
+
+*If you believe the action was not appropriate or applicable to the situation, click “Not Applicable.”*
+
+*If you completed the action, use Track Changes to mark the location (click Review in the Banner then click New Comment) in your transcript where you completed the action and click “Done.” An example is provided below.*
+
+*Also, if you notice errors in the transcription of your simulated meeting, please mark them using track changes (.doc) or comments (.pdf) as well.   Save the completed version of your survey when finished.*
+
+
+
+```{r reading_raw_data, include=FALSE}
+data<-read_csv(here::here("data", "SimulatedCommunicati-SCIPFollowupStudyDat_DATA_LABELS_2019-05-07_1423.csv"))
+
+data<-data %>%
+        filter(`Complete?`=="Complete")  #Note this results in 152 rows
+```
+
+
+```{r question_text, include=FALSE}
+questions<-names(data)
+```
+
+```{r re_name, include=FALSE}
+names(data)<-c("uid", 
+               "prognosis", "prognosis_l", "prognosis_t", 
+               "vgp", "vgp_l", "vgp_t",
+               "choice", "choice_l", "choice_t",
+               "comfort", "comfort_l", "comfort_t", 
+               "rec", "rec_l", "rec_t", 
+               "withdraw", "withdraw_l", "withdraw_t", 
+               "PDF", "other", "complete")
+```
+
+```{r dde, include=FALSE}
+data$team<-ifelse(str_detect(data$uid, "--1"), 1, 2)
+
+table(data$team, data$prognosis)
+table(data$team, data$vgp)
+table(data$team, data$choice)
+table(data$team, data$comfort)
+table(data$team, data$rec)
+table(data$team, data$withdraw)
+
+### Super, the dde agrees.  Second version can be deleted. 
+data<-data %>%
+    filter(str_detect(uid, "--1")) %>%
+    mutate(uid=str_remove(uid, pattern ="--1")) %>%
+    mutate(uid=as.numeric(uid))
+```
+
+```{r fu_descriptive, include=FALSE}
+sda_cat<-data %>%
+    select(uid, prognosis, vgp, choice, comfort, rec, withdraw) %>%
+    mutate_at(vars(-uid), as.factor) 
+
+prognosis<-sda_cat %>%
+    tabyl(prognosis) %>%
+    adorn_pct_formatting(rounding = "half up", digits = 0) %>%
+    mutate(N=paste0(n, " ", "(", percent, ")")) %>%
+    select(prognosis, N) %>%
+    spread(key=prognosis, value=N)
+ 
+vgp<-sda_cat %>%
+    tabyl(vgp) %>%
+    adorn_pct_formatting(rounding = "half up", digits = 0) %>%
+    mutate(N=paste0(n, " ", "(", percent, ")")) %>%
+    select(vgp, N) %>%
+    spread(key=vgp, value=N)
+
+choice<-sda_cat %>%
+    tabyl(choice) %>%
+    adorn_pct_formatting(rounding = "half up", digits = 0) %>%
+    mutate(N=paste0(n, " ", "(", percent, ")")) %>%
+    select(choice, N) %>%
+    spread(key=choice, value=N)
+
+comfort<-sda_cat %>%
+    tabyl(comfort) %>%
+    adorn_pct_formatting(rounding = "half up", digits = 0) %>%
+    mutate(N=paste0(n, " ", "(", percent, ")")) %>%
+    select(comfort, N) %>%
+    spread(key=comfort, value=N)
+
+rec<-sda_cat %>%
+    tabyl(rec) %>%
+    adorn_pct_formatting(rounding = "half up", digits = 0) %>%
+    mutate(N=paste0(n, " ", "(", percent, ")")) %>%
+    select(rec, N) %>%
+    spread(key=rec, value=N)
+
+withdraw<-sda_cat %>%
+    tabyl(withdraw) %>%
+    adorn_pct_formatting(rounding = "half up", digits = 0) %>%
+    mutate(N=paste0(n, " ", "(", percent, ")")) %>%
+    select(withdraw, N) %>%
+    spread(key=withdraw, value=N)
+
+freq_tab1<-rbind(prognosis, vgp, choice, comfort, rec, withdraw)
+rm(prognosis, vgp, choice, comfort, rec, withdraw)
+
+freq_tab1$Question<-c(questions[2], questions[5], questions[8], questions[11], questions[14], questions[17])
+
+freq_tab1<-freq_tab1 %>%
+    select(Question, Done, `Not Done`, `Not Applicable`)
+
+freq_tab1
+```
+
+```{r response_patterns, include=FALSE}
+sda_cat %>% 
+    count(prognosis, vgp, choice, comfort, rec, withdraw) %>%
+    arrange(desc(n)) 
+```
+
+```{r trial_data, include=FALSE}
+load(here::here("data", "20180313_SCIP data & codebook.RData"))
+```
+
+```{r merge_datasets, include=FALSE, warning=FALSE}
+working<-left_join(sda_cat, post_dta, by="uid")
+
+custom_reorder<-function(x) {
+    fct_relevel(x, "Done", "Not done", "Not applicable", "Don't remember")
+    }
+
+custom_reorder2<-function(x) {
+    fct_relevel(x, "Done", "Not Done", "Not Applicable")
+    }
+
+before<-c("convey_prognosis_death", "elicit_patient_values", "highlight_choice", "offer_alternative_of_care", "provide_recommendation", "bring_up_withdraw_life_support")
+
+after<-dput(names(sda_cat))
+after<-after[2:7]
+
+working<-working %>%
+    mutate_at(vars(before), funs(custom_reorder)) %>%
+    mutate_at(vars(after), funs(custom_reorder2))
+  
+```
+
+<!-- funs() is soft deprecated as of dplyr 0.8.0 -->
+<!-- please use list() instead -->
+
+<!--   # Before: -->
+<!--   funs(name = f(.)) -->
+
+<!--   # After: -->
+<!--   list(name = ~ f(.)) -->
+<!-- This warning is displayed once per session.Unknown levels in `f`: Don't remember -->
+
+
+***
+***
+
+**Among 116 eligilbe intensivists, 76 (66%) completed the survey.**
+**How representative of the trial sample are these respondants?**
+
+```{r demographics, echo=FALSE}
+md<-md %>%
+  mutate(survey=ifelse(uid %in% working$uid, "Yes", "No"))
+
+md$Yrs_since_res<-2018-md$year_complete_first_residency
+
+tab1vars<-c("tx", "age", "gender", "race", "hosp_type_for_profit", "hosp_ac_st_univ", "Yrs_since_res", "icu_weeks")
+catvars1<-c("tx", "gender", "race", "hosp_type_for_profit", "hosp_ac_st_univ")
+
+tab1<-CreateTableOne(vars=tab1vars, strata="survey", data = md, factorVars = catvars1)
+tab1
+```
+
+**We compared the answers provided to 6 questions about the simulation immediately after participating in the simulation to the answers provided a year later after intensivists reviewed their own transcripts.**    
+
+*** 
+*** 
+
+#### During the simulation, did you convey prognosis for risk of death?
+```{r prognosis_tab, echo=FALSE}
+prog_tab<-table(working$convey_prognosis_death, working$prognosis)
+
+kable(prog_tab) %>%
+     kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+         footnote(general = "Rows are responses given immediately after the simulation, columns are responses provided after reviewing the transcript a year later.",
+            threeparttable = T)
+
+## Looking at Molly's question about whether age is correlated with whether they think they conveyed prognosis for risk of death. 
+ages<-md %>% select(uid, age)
+working<- merge(working, ages, by="uid", all.x = TRUE)
+rm(ages)
+
+
+## Adding in data on how Roy and Molly evaluated transcripts
+temp<-outcome[which(outcome$assesser=="final"), c("uid", "death", "comfort", "comfort_understandable")]
+working<-merge(working, temp, by="uid", all.x = TRUE)
+rm(temp)
+
+### Crap, now we've got two variables "comfort.x" which is the self-coding by intensivists
+### and comfort.y which is Roy and Molly's coding.  
+
+### Lets rename them comfort_selfcode and comfort_rm.
+working<-working %>%
+    rename(comfort_selfcode=comfort.x, comfort_rm=comfort.y)
+    
+
+fig1<-ggplot(working, aes(prognosis, age, fill = death))
+fig1 + geom_dotplot(binaxis="y", stackdir = "center", binwidth = 1, alpha=0.5) + 
+       labs(title="Intensivist age by response to 'did you convey prognosis for risk of death?'", 
+            x="Intensivist's Own Coding", y="Age", fill="Roy & Molly Coding")+
+       scale_fill_manual(values = c("white", "red"))+
+       theme_bw()
+
+```
+
+***
+*** 
+
+#### During the simulation, did you elicit the patient’s values, goals, and preferences?
+ex. Elicit previously expressed treatment preferences (oral or written), elicit patient’s values about relevant health states, ask proxy what the patient would likely choose if he were able to speak for himself
+```{r values_tab, echo=FALSE, warning=FALSE}
+pvg_tab<-table(working$elicit_patient_values, working$vgp)
+
+kable(pvg_tab) %>%
+   kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+         footnote(general = "Rows are responses given immediately after the simulation, columns are responses provided after reviewing the transcript a year later.",
+            threeparttable = T)
+
+fig6<-ggplot(working, aes(vgp, age))
+fig6<-fig6 + geom_dotplot(binaxis="y", stackdir = "center", binwidth = 1, alpha=0.5) + 
+       labs(title="Intensivist age by response to 'did you elicit the patient's values, goals, and preferences?'", 
+            x="Response", y="Age")+
+       theme_bw()
+fig6 + 
+  theme(plot.title=element_text(size=rel(0.9), face="bold"))
+
+```
+
+***
+*** 
+
+#### During the simulation, did you highlight that there is a choice?
+```{r choice_tab, echo=FALSE, warning=FALSE}
+choice_tab<-table(working$highlight_choice, working$choice)
+
+kable(choice_tab) %>%
+   kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+         footnote(general = "Rows are responses given immediately after the simulation, columns are responses provided after reviewing the transcript a year later.",
+            threeparttable = T)
+
+fig2<-ggplot(working, aes(choice, age))
+fig2 + geom_dotplot(binaxis="y", stackdir = "center", binwidth = 1, alpha=0.5) + 
+       labs(title="Intensivist age by response to 'did you highlight that there is a choice?'", 
+            x="Response", y="Age")+
+       theme_bw()
+```
+
+***
+***
+
+#### During the simulation, did you offer the alternative of care focused entirely on comfort?
+###### Also note that on the survey completed immediately after the simulation, we asked "Why or why not" and left an open text box for answers. These responses have not been analyzed yet. 
+```{r comfort_tab, echo=FALSE, warning=FALSE}
+offer_tab<-table(working$offer_alternative_of_care, working$comfort_selfcode)
+
+kable(offer_tab) %>%
+   kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+         footnote(general = "Rows are responses given immediately after the simulation, columns are responses provided after reviewing the transcript a year later.",
+            threeparttable = T)
+
+## Lets use Roy and Molly's response to the question "How understandable was the intensivist's description of comfort care
+## for proxies with low health literacy?
+
+working<-working %>% 
+            mutate(comfort_understandable=fct_explicit_na(comfort_understandable))        
+  
+  working$comfort_understandable<-fct_relevel(working$comfort_understandable, 
+  c("(Missing)", "Not understandable", "Vague",    "Understandable", "Clear", "Clear and detailed"))  
+  
+  working$comfort_understandable<-fct_drop(working$comfort_understandable)
+  working$comfort_understandable<-fct_recode(working$comfort_understandable, `Not Offered`="(Missing)")
+
+palatte <- scales::seq_gradient_pal("white", "red", "Lab")(seq(0,1,length.out=5))  
+
+fig3<-ggplot(working, aes(comfort_selfcode, age, fill = comfort_understandable))
+fig3<-fig3 + geom_dotplot(binaxis="y", stackdir = "center", binwidth = 1, alpha=0.5) + 
+       labs(title="Intensivist age by response to 'did you offer the alternative of care focused entirely on comfort?'", 
+            x="Intensivist Self-Coding", y="Age", 
+            fill="How understandable was the \nintensivist's description of \ncomfort care for proxies \nwith low health literacy?")+ 
+  scale_fill_manual(values = palatte)+
+ theme_bw()
+
+fig3 +
+  theme(plot.title=element_text(size=rel(0.9), face="bold"))
+```
+
+
+#### During the simulation, did you provide a recommendation?
+```{r rec_tab, echo=FALSE, warning=FALSE}
+rec_tab<-table(working$provide_recommendation, working$rec)
+
+kable(rec_tab) %>%
+   kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+         footnote(general = "Rows are responses given immediately after the simulation, columns are responses provided after reviewing the transcript a year later.",
+            threeparttable = T)
+
+fig4<-ggplot(working, aes(rec, age))
+fig4 + geom_dotplot(binaxis="y", stackdir = "center", binwidth = 1, alpha=0.5) + 
+       labs(title="Intensivist age by response to 'did you provide a recommendation?'", 
+            x="Response", y="Age")+
+       theme_bw()
+```
+
+***
+***
+
+#### During the simulation, did you bring up the possibility of withdrawing life support?
+```{r withdraw_tab, echo=FALSE, warning=FALSE}
+withdraw_tab<-table(working$bring_up_withdraw_life_support, working$withdraw)
+
+kable(withdraw_tab) %>%
+   kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+         footnote(general = "Rows are responses given immediately after the simulation, columns are responses provided after reviewing the transcript a year later.",
+            threeparttable = T)
+
+fig5<-ggplot(working, aes(withdraw, age))
+fig5<-fig5 + geom_dotplot(binaxis="y", stackdir = "center", binwidth = 1, alpha=0.5) + 
+       labs(title="Intensivist age by response to 'did you bring up the possibility of withdrawing life support?'", 
+            x="Response", y="Age")+
+       theme_bw()
+
+fig5 + 
+  theme(plot.title=element_text(size=rel(0.9), face="bold"))
+```
+
+
+Extracting the Study ID, self-rating, self-rating in survey, lines, and quotes, for 4 SDM recs + Choosing Wisely
+
+```{r extraction_merge, echo=FALSE, warning=FALSE}
+temp1<-working %>%
+    select(uid, before[1:5], prognosis, vgp, choice, comfort_selfcode, rec, comfort_rm, comfort_understandable, death)  
+
+temp2<-data %>%
+  select(uid, prognosis_l, prognosis_t, vgp_l,  vgp_t,  choice_l, choice_t, comfort_l,  comfort_t,  rec_l,  rec_t)
+
+temp3<-merge(temp1, temp2, by="uid")
+rm(temp1, temp2)
+
+temp3<-temp3 %>%
+  select(uid, death, convey_prognosis_death, prognosis, prognosis_l, prognosis_t, highlight_choice, choice, choice_l, choice_t, 
+         elicit_patient_values, vgp, vgp_l, vgp_t, provide_recommendation, rec, rec_l, rec_t, comfort_rm, comfort_understandable, offer_alternative_of_care, comfort_selfcode, comfort_l, comfort_t)
+
+write_csv(temp3[, c("uid", "death", "convey_prognosis_death", "prognosis", "prognosis_l", "prognosis_t")], here::here("raw_tables","20190624_prognosis.csv"))
+write_csv(temp3[, c("uid", "highlight_choice", "comfort_selfcode", "choice", "choice_l", "choice_t")], here::here("raw_tables","20190624_choice.csv"))
+write_csv(temp3[, c("uid", "elicit_patient_values", "vgp", "vgp_l", "vgp_t")], here::here("raw_tables","20190624_values.csv"))
+write_csv(temp3[, c("uid", "provide_recommendation", "rec", "rec_l", "rec_t")], here::here("raw_tables","20190624_reccomendations.csv"))
+write_csv(temp3[, c("uid", "comfort_rm", "comfort_understandable", "offer_alternative_of_care", "comfort_selfcode", "comfort_l", "comfort_t")], here::here("raw_tables","20190624_comfort.csv"))
+```
+
+
+Recategorizing responses to just be "yes" or "no" and then running McNemar's test for prognosis, choice, and comfort
+(Also wondering if we should add recommendation to this +/- categorize the recommendations)
+```{r mcnemar, echo=FALSE, warning=FALSE}
+mndata<-working %>%
+    select(uid, convey_prognosis_death, prognosis, highlight_choice, choice, provide_recommendation, rec, offer_alternative_of_care, comfort_selfcode) 
+
+
+SimpleFun<-function(data, variable) {
+  data %>%
+    mutate_at(vars(variable), 
+              funs(fct_collapse(., 
+                                Not_done=c("Not Done", "Not done", "Not Applicable", "Not applicable"))))
+}
+
+mndata<-SimpleFun(mndata, 2:9)
+
+mn_prog_tab<-table(mndata$convey_prognosis_death, mndata$prognosis, exclude = "Don't remember")
+mn_prog_tab
+mcnemar.test(mn_prog_tab)
+
+mn_choice_tab<-table(mndata$highlight_choice, mndata$choice, exclude = "Don't remember")
+mn_choice_tab
+mcnemar.test(mn_choice_tab)
+
+mn_offer_tab<-table(mndata$offer_alternative_of_care, mndata$comfort_selfcode,  exclude = "Don't remember")
+mn_offer_tab
+mcnemar.test(mn_offer_tab)
+
+mn_rec_tab<-table(mndata$provide_recommendation, mndata$rec,  exclude = "Don't remember")
+mn_rec_tab
+mcnemar.test(mn_rec_tab)
+
+```
+

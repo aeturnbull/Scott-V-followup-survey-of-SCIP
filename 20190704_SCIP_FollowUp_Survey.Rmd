@@ -198,7 +198,7 @@ tab1vars<-c("tx", "age", "gender", "race", "hosp_type_for_profit", "hosp_ac_st_u
 catvars1<-c("tx", "gender", "race", "hosp_type_for_profit", "hosp_ac_st_univ")
 
 tab1<-CreateTableOne(vars=tab1vars, strata="survey", data = md, factorVars = catvars1)
-tab1
+print(tab1, smd = TRUE)
 ```
 
 **We compared the answers provided to 6 questions about the simulation immediately after participating in the simulation to the answers provided a year later after intensivists reviewed their own transcripts.**    

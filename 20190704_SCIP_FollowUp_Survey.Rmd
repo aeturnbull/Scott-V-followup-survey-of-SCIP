@@ -22,6 +22,7 @@ library(forcats)
 library(stringr)
 library(janitor)
 library(purrr)
+library(effsize)
 ```
 
 **About a year after the SCIP trial ended, all participants were invited to review deidentified transcripts of their simulated family meeting.**
@@ -199,6 +200,11 @@ catvars1<-c("tx", "gender", "race", "hosp_type_for_profit", "hosp_ac_st_univ")
 
 tab1<-CreateTableOne(vars=tab1vars, strata="survey", data = md, factorVars = catvars1)
 print(tab1, smd = TRUE)
+
+cohen.d(md$age, md$survey)           # Age
+cohen.d(md$Yrs_since_res, md$survey) # Years since residency 
+cohen.d(md$icu_weeks, md$survey)     # Years in ICU 
+
 ```
 
 **We compared the answers provided to 6 questions about the simulation immediately after participating in the simulation to the answers provided a year later after intensivists reviewed their own transcripts.**    
